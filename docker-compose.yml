@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "9100:9100"
+    volumes:
+      - ladderbill_data:/data
+    environment:
+      DATA_DIR: /data
+  frontend:
+    build: ./frontend
+    ports:
+      - "4100:80"
+    depends_on:
+      - backend
+volumes:
+  ladderbill_data:
