@@ -160,3 +160,41 @@ def test_confirm_revalidates_against_writes_after_preview(client):
     assert r.status_code == 409
     assert r.json()["detail"]["failures"][0]["error_code"] == "PERIOD_CONFLICT"
     assert _count(client) == SEED_READINGS + 1  # 失败批次整批回滚
+
+
+def _kwh_map(client, period):
+    items = client.get("/api/readings").json()["items"]
+    return {i["account_id"]: i["kwh"] for i in items if i["period"] == period}
+
+
+def test_two_batches_each_row_keeps_own_kwh_and_account(client):
+    # 第一批：户1=100、户2=200，合计 300
+    p1 = _preview(
+        client,
+        [
+            {"account_id": 1, "period": "2026-09", "kwh": 100},
+            {"account_id": 2, "period": "2026-09", "kwh": 200},
+        ],
+    )
+    assert p1["total_kwh"] == 300
+    assert _confirm(client, p1["token"]).status_code == 200
+
+    # 第二批：户1=300、户2=400，合计 700（不同账期，不撞期）
+    p2 = _preview(
+        client,
+        [
+            {"account_id": 1, "period": "2026-10", "kwh": 300},
+            {"account_id": 2, "period": "2026-10", "kwh": 400},
+        ],
+    )
+    assert p2["total_kwh"] == 700
+    assert _confirm(client, p2["token"]).status_code == 200
+
+    # 每批每行户号与电量均与自己那次预览同一行一致
+    assert _kwh_map(client, "2026-09") == {1: 100.0, 2: 200.0}
+    assert _kwh_map(client, "2026-10") == {1: 300.0, 2: 400.0}
+
+    # 各批电量之和等于该次预览合计
+    got = client.get("/api/readings").json()["items"]
+    assert sum(i["kwh"] for i in got if i["period"] == "2026-09") == p1["total_kwh"]
+    assert sum(i["kwh"] for i in got if i["period"] == "2026-10") == p2["total_kwh"]

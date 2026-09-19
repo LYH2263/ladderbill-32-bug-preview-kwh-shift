@@ -109,14 +109,11 @@ class BillingService:
         if failures:
             raise ConfirmFailed(failures)
         try:
-            inserted, replaced, qty = readings_repo.persist_rows(
-                self._conn, rows, preview_tokens.kwh_cursor()
-            )
+            inserted, replaced = readings_repo.persist_rows(self._conn, rows)
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
-        preview_tokens.move_kwh_cursor(qty)
         preview_tokens.consume(token)
         return {"inserted": inserted, "replaced": replaced, "total": inserted + replaced}
 
