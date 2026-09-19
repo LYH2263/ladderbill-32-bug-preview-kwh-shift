@@ -160,3 +160,36 @@ def test_confirm_revalidates_against_writes_after_preview(client):
     assert r.status_code == 409
     assert r.json()["detail"]["failures"][0]["error_code"] == "PERIOD_CONFLICT"
     assert _count(client) == SEED_READINGS + 1  # 失败批次整批回滚
+
+
+def test_confirm_writes_each_rows_own_kwh_across_batches(client):
+    """确认后每行户号/电量与预览同一行一致；跨批不串行，前批不被改写。"""
+    batch1 = [
+        {"account_id": 1, "period": "2026-09", "kwh": 111.5},
+        {"account_id": 2, "period": "2026-09", "kwh": 222.25, "peak": True},
+    ]
+    p1 = _preview(client, batch1)
+    assert p1["all_valid"] and p1["total_kwh"] == 333.75
+    assert _confirm(client, p1["token"]).status_code == 200
+
+    # 换一批户和电量再预览确认：第一行不得带上批最后一行的电量
+    batch2 = [
+        {"account_id": 2, "period": "2026-10", "kwh": 10},
+        {"account_id": 1, "period": "2026-10", "kwh": 20},
+    ]
+    p2 = _preview(client, batch2)
+    assert p2["all_valid"] and p2["total_kwh"] == 30
+    assert _confirm(client, p2["token"]).status_code == 200
+
+    items = client.get("/api/readings").json()["items"]
+    mine = [i for i in items if i["period"] in ("2026-09", "2026-10")]
+    # 与两次预览同位置逐行对齐：户号、电量都一致
+    assert [(i["account_id"], i["kwh"]) for i in mine] == [
+        (1, 111.5),
+        (2, 222.25),
+        (2, 10),
+        (1, 20),
+    ]
+    # 每批电量之和等于该次预览合计；第一批在第二批确认后保持原样
+    assert sum(i["kwh"] for i in mine[:2]) == p1["total_kwh"]
+    assert sum(i["kwh"] for i in mine[2:]) == p2["total_kwh"]

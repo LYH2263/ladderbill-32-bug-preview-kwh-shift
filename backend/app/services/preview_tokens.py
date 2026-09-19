@@ -23,18 +23,6 @@ class TokenError(Exception):
 
 _lock = threading.Lock()
 _tokens: dict[str, dict] = {}
-_kwh_cursor = 0.0
-
-
-def kwh_cursor() -> float:
-    with _lock:
-        return _kwh_cursor
-
-
-def move_kwh_cursor(kwh: float) -> None:
-    global _kwh_cursor
-    with _lock:
-        _kwh_cursor = float(kwh)
 
 
 def _purge_expired(now: float) -> None:

@@ -36,15 +36,15 @@ def update(conn: sqlite3.Connection, reading_id: int, kwh: float, peak: bool) ->
     )
 
 
-def persist_rows(conn: sqlite3.Connection, rows: list[dict], qty: float) -> tuple[int, int, float]:
+def persist_rows(conn: sqlite3.Connection, rows: list[dict]) -> tuple[int, int]:
     inserted = replaced = 0
     for row in rows:
+        kwh = float(row["kwh"])
         existing = find_by_period(conn, row["account_id"], row["period"])
         if existing:
-            update(conn, existing["id"], qty, bool(row["peak"]))
+            update(conn, existing["id"], kwh, bool(row["peak"]))
             replaced += 1
         else:
-            insert(conn, row["account_id"], row["period"], qty, bool(row["peak"]))
+            insert(conn, row["account_id"], row["period"], kwh, bool(row["peak"]))
             inserted += 1
-        qty = float(row["kwh"])
-    return inserted, replaced, qty
+    return inserted, replaced
